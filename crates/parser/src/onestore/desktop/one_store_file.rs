@@ -9,7 +9,7 @@ use crate::fsshttpb::data::cell_id::CellId;
 use crate::onestore::desktop::file_structure;
 use crate::onestore::desktop::objects;
 use crate::onestore::desktop::objects::root_file_node_list::RootFileNodeList;
-use crate::onestore::desktop::parse::{Parse, ParseWithCount};
+use crate::onestore::desktop::parse::Parse;
 use crate::onestore::desktop::{common::FileChunkReference, file_structure::FileNodeList};
 use crate::onestore::{OneStore, OneStoreType};
 
@@ -84,13 +84,20 @@ impl Parse for RevisionStore {
             free_chunk_list.push(fragment);
         }
 
+        // Only the first c_transactions_in_log transactions are committed. Stop there instead of
+        // following the last fragment's next_fragment, which can point at stale data.
         let mut transaction_log = Vec::new();
         let mut transaction_log_ref = header.fcr_transaction_log.clone();
-        loop {
+        let mut transactions_remaining = header.c_transactions_in_log;
+        while transactions_remaining > 0 {
             let mut reader = transaction_log_ref.resolve_to_reader(reader)?;
 
-            let fragment =
-                TransactionLogFragment::parse(&mut reader, transaction_log_ref.cb as usize)?;
+            let fragment = TransactionLogFragment::parse(
+                &mut reader,
+                transaction_log_ref.cb as usize,
+                transactions_remaining,
+            )?;
+            transactions_remaining -= fragment.transaction_count;
             transaction_log_ref = fragment.next_fragment.clone();
             transaction_log.push(fragment);
 

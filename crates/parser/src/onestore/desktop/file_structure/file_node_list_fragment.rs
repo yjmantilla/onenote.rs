@@ -28,7 +28,7 @@ impl FileNodeListFragment {
         let remaining_0 = reader.remaining();
 
         // Sometimes, the node count is specified externally
-        let mut maximum_node_count = context.get_file_node_count(&header).unwrap_or({
+        let mut maximum_node_count = context.get_file_node_count(&header).unwrap_or_else(|| {
             log::warn!("No node count found.");
             usize::MAX
         });

@@ -209,7 +209,8 @@ impl ParseWithCount for FileData {
 /// See [\[MS-ONESTORE\] 2.5.22](https://learn.microsoft.com/en-us/openspecs/office_file_formats/ms-onestore/6f6d5729-ad03-420f-b8fa-7683751218b3)
 #[derive(Debug, Clone)]
 pub(crate) struct FileDataStoreObjectReferenceFND {
-    pub(crate) target: FileDataStoreObject,
+    /// `None` if the reference is zero or nil, i.e. the entry has no file data.
+    pub(crate) target: Option<FileDataStoreObject>,
     pub(crate) guid: Guid,
 }
 
@@ -217,9 +218,13 @@ impl ParseWithRef<'_> for FileDataStoreObjectReferenceFND {
     fn parse(reader: Reader, data_ref: &FileNodeDataRef) -> Result<Self> {
         let guid = Guid::parse(reader)?;
         if let FileNodeDataRef::SingleElement(data_ref) = data_ref {
+            if data_ref.is_fcr_zero() || data_ref.is_fcr_nil() {
+                return Ok(Self { target: None, guid });
+            }
+
             let mut reader = data_ref.resolve_to_reader(reader)?;
             Ok(Self {
-                target: FileDataStoreObject::parse(&mut reader)?,
+                target: Some(FileDataStoreObject::parse(&mut reader)?),
                 guid,
             })
         } else {

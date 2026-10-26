@@ -143,8 +143,14 @@ impl FileNode {
             )?),
             2 => FileNodeDataRef::ElementList({
                 let list_ref = FileNodeChunkReference::parse(reader, stp_format, cb_format)?;
-                let mut resolved_reader = list_ref.resolve_to_reader(reader)?;
-                FileNodeList::parse(&mut resolved_reader, context, list_ref.data_size())
+                if list_ref.is_fcr_zero() || list_ref.is_fcr_nil() {
+                    // Superseded references (e.g. all but the last RevisionManifestListReferenceFND
+                    // in an object space manifest list) can be zeroed out. They point to no data.
+                    Ok(FileNodeList::default())
+                } else {
+                    let mut resolved_reader = list_ref.resolve_to_reader(reader)?;
+                    FileNodeList::parse(&mut resolved_reader, context, list_ref.data_size())
+                }
             }?),
             _ => FileNodeDataRef::InvalidData,
         };
@@ -296,6 +302,58 @@ impl FileNode {
                 .into())
         } else {
             Ok(node)
+        }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::reader::Reader;
+
+    fn node_header(
+        node_id: u32,
+        size: u32,
+        stp_format: u32,
+        cb_format: u32,
+        base_type: u32,
+    ) -> u32 {
+        node_id | (size << 10) | (stp_format << 23) | (cb_format << 25) | (base_type << 27)
+    }
+
+    #[test]
+    fn zero_list_reference_parses_as_empty_list() {
+        // RevisionManifestListReferenceFND (0x10) with a zeroed FileNodeChunkReference
+        // (4-byte stp, 1-byte compressed cb), as left behind for superseded revisions.
+        let mut data = node_header(0x010, 9, 1, 2, 2).to_le_bytes().to_vec();
+        data.extend_from_slice(&[0; 5]);
+        let mut reader = Reader::new(&data);
+
+        let node = FileNode::parse(&mut reader, &mut ParseContext::new()).unwrap();
+
+        match node.fnd {
+            FileNodeData::RevisionManifestListReferenceFND(reference) => {
+                assert!(reference.list.file_node_sequence.is_empty());
+            }
+            other => panic!("unexpected node: {other:?}"),
+        }
+    }
+
+    #[test]
+    fn zero_file_data_store_reference_has_no_target() {
+        // FileDataStoreObjectReferenceFND (0x94) with a zeroed FileNodeChunkReference
+        // (4-byte stp, 2-byte compressed cb) and a null GUID.
+        let mut data = node_header(0x094, 26, 1, 3, 1).to_le_bytes().to_vec();
+        data.extend_from_slice(&[0; 22]);
+        let mut reader = Reader::new(&data);
+
+        let node = FileNode::parse(&mut reader, &mut ParseContext::new()).unwrap();
+
+        match node.fnd {
+            FileNodeData::FileDataStoreObjectReferenceFND(reference) => {
+                assert!(reference.target.is_none());
+            }
+            other => panic!("unexpected node: {other:?}"),
         }
     }
 }

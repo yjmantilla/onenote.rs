@@ -33,9 +33,13 @@ impl FileDataStore {
         let mut files = Vec::new();
         for item in iterator {
             if let FileNodeData::FileDataStoreObjectReferenceFND(item) = item {
+                let Some(target) = &item.target else {
+                    log::warn!("Skipping file data store entry without data: {}", item.guid);
+                    continue;
+                };
                 files.push(File {
                     id: item.guid,
-                    file_data: item.target.file_data.clone(),
+                    file_data: target.file_data.clone(),
                 })
             } else {
                 return Err(onestore_parse_error!(

@@ -5,6 +5,19 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Fixed
+
+- Desktop (OneNote 2016-style) sections no longer fail with "Unexpected end of
+  file" when the transaction log is followed by stale data. Only the first
+  `cTransactionsInLog` transactions are read, and the last fragment's
+  `nextFragment` is ignored.
+- Zero or nil file node chunk references (left behind for superseded revision
+  manifest lists and empty file data store entries) are treated as empty
+  instead of being resolved, which also failed with "Unexpected end of file".
+- The "No node count found" warning is only logged when the count is missing.
+
 ## [2.1.0] - 2026-10-19
 
 ### Added
